@@ -1,0 +1,102 @@
+---
+title: "A1"
+author: "Shamir Kalaria"
+date: "November 21, 2015"
+output: html_document
+---
+
+## LIBRARIES
+```{r}
+library(PKPDmisc)
+library(ggplot2)
+library(knitr)
+library(dplyr)
+```
+
+## DATA IMPORT
+```{r readdata}
+conc <- read.csv("../Data/conc_time.csv")
+demo <- read.csv("../Data/demog.csv")
+```
+
+## DATA CHECKOUT AND PREPARATION
+```{r}
+demo <- demo %>% mutate(GENDER=factor(ifelse(SEX=="0", "FEMALE", "MALE")))
+demo <- demo %>% mutate(RACE=factor(ifelse(RNUM=="1", "HISPANIC", ifelse(RNUM=="2", "BLACK", ifelse(RNUM=="3","CAUCASIAN","ASIAN")))))
+
+## missing WT 
+WT_flag <- demo %>% filter(!is.na(WT))
+mean_WT <- WT_flag %>% group_by(SEX) %>% summarize(meanWT = mean(WT))
+demo[c("WT")][is.na(demo[c("WT")])] <- 70.28
+
+## Joining concentration and demographic datasets
+all_data <- left_join(conc, demo)
+head(all_data)
+
+##Flagging data for missing/bql concentrations
+all_data <- all_data %>% mutate(FLAG = ifelse(DV == "bql", 1, ifelse(DV == "missing",2,0)))
+flagged_samples <- all_data %>% filter(FLAG >= 1) %>% select(ID,TIME,FLAG)
+head(flagged_samples)
+all_data$DV[all_data$FLAG!="0"] <- NA
+```
+
+## SUMMARY STATISTICS OF DEMOGRAPHIC INFORMATION
+```{r}
+## Summary of covariates
+demo %>% select(WT, AGE) %>% summary
+demo %>% group_by(GENDER) %>% summarize(n = n())
+demo %>% group_by(RACE) %>% summarize(n = n())
+
+demo %>% group_by(GENDER) %>% summarize(minWT = min(WT), meanWT = mean(WT), maxWT = max(WT), minAGE = min(AGE), meanAGE = mean(AGE), maxAGE = max(AGE))
+demo %>% group_by(RACE) %>% summarize(minWT = min(WT), meanWT = mean(WT), maxWT = max(WT), minAGE = min(AGE), meanAGE = mean(AGE), maxAGE = max(AGE))
+```
+
+##PLOTTING CONCENTRATIONS
+```{r}
+
+## Theme
+my_theme<-function()
+{
+  theme(panel.background = element_rect(fill='white', colour='red'))+
+    theme(axis.title.y = element_text(colour = 'black', size = 20))+
+    theme(axis.text.y = element_text(size = 18,colour = 'black'))+
+    theme(axis.title.x = element_text(colour = 'black', size = 20))+
+    theme(axis.text.x = element_text(size = 18,colour = 'black'))+
+    theme(plot.title = element_text(size = 18, lineheight=1, face="bold"))+
+    theme(legend.position="top")+
+    theme(legend.title=element_blank())+
+    theme(legend.text = element_text(colour="blue", size = 18, face = "bold"))
+}
+
+##Plot of Concentration vs time per individual
+##changing DV to numeric
+str(all_data)
+all_data$DV <- as.character(all_data$DV)
+all_data$DV <- as.numeric(all_data$DV)
+
+##Plotting Concentration vs Time by ID and Dose
+conc_time_dose <- ggplot(data=all_data, aes(x=TIME, y=DV, group=ID)) + geom_line() + geom_point() + facet_wrap(~DOSE) + labs(title= "Concentration (mg/L) vs. Time (hours) Plot",x="Time (hours)", y="Concentration (mg/L)")
+conc_time_dose+ my_theme()
+
+##Plotting Concentration vs Time in Semi Log Scale
+conc_time_dose_log <- conc_time_dose + scale_y_log10()
+conc_time_dose_log + ggtitle("Log Concentration (mg/L) vs. Time (hours) Plot") + my_theme()
+```
+
+##Exportation of Dataset for Pheonix Modeling
+```{r}
+write.csv(all_data, "all_data_A1.csv")
+```
+
+##Box Plots for Dose Normalized AUC and Cmax
+```{r}
+nca_ind <- read.csv("../Data/ind_nca_parameters.csv")
+nca_ind$DOSE <-as.character(nca_ind$DOSE)
+AUC_dose <- ggplot(data=nca_ind,aes(x=DOSE, y=AUCINF_D_obs, group=DOSE)) + geom_boxplot() 
+AUC_dose
+cmax_dose <-ggplot(data=nca_ind,aes(x=DOSE, y=Cmax_D, group=DOSE)) + geom_boxplot() 
+cmax_dose
+```
+
+
+
